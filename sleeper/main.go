@@ -41,10 +41,10 @@ func (s *Sleeper) tryToSleep() {
 		}
 	}
 
-	// If we last checked for caffeination more than threshold ago, then this means the server was asleep.
+	// If we last checked for caffeination more than 2 minutes ago, then this means the server was asleep.
 	// And we should reset the caffeination time
-	if time.Now().Sub(s.lastCaffeinateCheck) > s.threshold {
-		log.Printf("Last caffeinated check time was more than threshold time ago. This should mean that the computer was asleep, and was woken.")
+	if time.Now().Sub(s.lastCaffeinateCheck) > 2*time.Minute {
+		log.Printf("Last caffeinated check time was more than 2 minutes ago. This should mean that the computer was asleep, and was woken.")
 		s.lastCaffeinated = time.Now()
 	}
 
@@ -197,8 +197,6 @@ func (j *JellyfinCaffeinater) shouldCaffeinate() (bool, error) {
 	if err != nil {
 		return false, err
 	}
-
-	log.Println("sessions: %v", sessions)
 
 	for _, session := range sessions {
 		if session.NowPlayingItem.Name != "" {
