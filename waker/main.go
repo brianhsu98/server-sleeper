@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os/exec"
 	"time"
 
@@ -62,6 +63,7 @@ func ipWatcher(ipAddr string, wakeCh chan struct{}) {
 			}
 
 			if res {
+				fmt.Printf("IP address %s is active. Waking target server", ipAddr)
 				wakeCh <- struct{}{}
 			} else {
 				fmt.Printf("IP address %s is not active", ipAddr)
@@ -72,6 +74,8 @@ func ipWatcher(ipAddr string, wakeCh chan struct{}) {
 }
 
 func main() {
+	log.SetFlags(log.LstdFlags)
+
 	ipAddr := "10.0.0.72"
 	macAddr := "6C:4B:90:4B:7B:91"
 	wakeCh := make(chan struct{})
