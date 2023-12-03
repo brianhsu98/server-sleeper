@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"os/exec"
 	"time"
@@ -16,13 +15,13 @@ func pingIP(ip string) (bool, error) {
 	}
 	pinger.Count = 1
 	pinger.Timeout = time.Second
-	err = pinger.Run() // Blocks until finished.
+	err = pinger.Run()
 
 	if err != nil {
 		return false, err
 	}
 
-	stats := pinger.Statistics() // get send/receive/duplicate/rtt stats
+	stats := pinger.Statistics()
 
 	return stats.PacketsRecv > 0, nil
 }
@@ -37,22 +36,28 @@ func wakeOnLan(macAddr string) error {
 	return nil
 }
 
-func waker(macAddr string, wakeCh <-chan struct{}) {
+func waker(targetHost string, macAddr string, wakeCh <-chan struct{}) {
 	for {
 		select {
 		case <-wakeCh:
-			go func() {
-				err := wakeOnLan(macAddr)
-				if err != nil {
-					fmt.Errorf("%s\n", err)
-				}
-			}()
+			targetHostActive, err := pingIP(targetHost)
+			if err != nil || !targetHostActive {
+				log.Printf("Waking server on lan")
+				go func() {
+					err := wakeOnLan(macAddr)
+					if err != nil {
+						log.Printf("Failed to wake on lan: %s\n", err)
+					}
+				}()
+			} else {
+				log.Printf("Target host is already awake. Not sending wakeonlan packet.\n")
+			}
 		}
 	}
 }
 
 func ipWatcher(ipAddr string, wakeCh chan struct{}) {
-	interval := 1 * time.Second // Set the interval for the ticker
+	interval := 3 * time.Second // Set the interval for the ticker
 	ticker := time.NewTicker(interval)
 	for {
 		select {
@@ -76,10 +81,12 @@ func ipWatcher(ipAddr string, wakeCh chan struct{}) {
 func main() {
 	log.SetFlags(log.LstdFlags)
 
+	// really we should be using DNS...
 	ipAddr := "10.0.0.72"
+	targetIp := "10.0.0.86"
 	macAddr := "6C:4B:90:4B:7B:91"
 	wakeCh := make(chan struct{})
 
 	go ipWatcher(ipAddr, wakeCh)
-	waker(macAddr, wakeCh)
+	waker(targetIp, macAddr, wakeCh)
 }
