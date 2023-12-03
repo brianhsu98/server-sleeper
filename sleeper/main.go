@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"time"
@@ -39,7 +40,7 @@ func (s *Sleeper) tryToSleep() {
 		}
 	}
 
-	if time.Now().Sub(s.lastCaffeinated) < s.threshold {
+	if time.Now().Sub(s.lastCaffeinated) > s.threshold {
 		log.Printf("Putting system to sleep. Last caffeintaed %s, current time %s", s.lastCaffeinated.String(), time.Now().String())
 		cmd := exec.Command("systemctl", "suspend")
 		err := cmd.Run()
@@ -103,17 +104,18 @@ func (q *QBittorrentCaffeinater) shouldCaffeinate() (bool, error) {
 }
 
 func (q *QBittorrentCaffeinater) login() (*http.Cookie, error) {
-	jsonData, err := json.Marshal(q.credentials)
+	data := url.Values{}
+	data.Set("username", q.credentials.Username)
+	data.Set("password", q.credentials.Password)
+	requestBody := bytes.NewBufferString(data.Encode())
+
+	url := q.url + "/api/v2/auth/login"
+
+	req, err := http.NewRequest("POST", url, requestBody)
 	if err != nil {
 		return nil, err
 	}
-
-	req, err := http.NewRequest("POST", q.url, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -134,7 +136,8 @@ func (q *QBittorrentCaffeinater) login() (*http.Cookie, error) {
 func (q *QBittorrentCaffeinater) queryTorrents(cookie *http.Cookie) ([]Torrent, error) {
 	client := &http.Client{}
 
-	req, err := http.NewRequest("GET", q.url, nil)
+	url := q.url + "/api/v2/torrents/info"
+	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -160,6 +163,8 @@ func (q *QBittorrentCaffeinater) queryTorrents(cookie *http.Cookie) ([]Torrent, 
 		return nil, err
 	}
 
+	log.Printf("Torrents: %v", torrents)
+
 	return torrents, nil
 }
 
@@ -182,6 +187,8 @@ func (j *JellyfinCaffeinater) shouldCaffeinate() (bool, error) {
 	if err != nil {
 		return false, err
 	}
+
+	log.Println("devices: %v", devices)
 
 	currTime := time.Now()
 	// if any device has been active in the last 10 minutes, call that caffeinated.
@@ -251,6 +258,8 @@ func main() {
 		os.Exit(1)
 	}
 
+	log.Println("Loaded config.")
+
 	jellyfinCaffeinater := JellyfinCaffeinater{
 		url:    config.JellyfinUrl,
 		apiKey: config.JellyfinApiKey,
@@ -271,7 +280,7 @@ func main() {
 		threshold:       20 * time.Minute,
 	}
 
-	ticker := time.NewTicker(30 * time.Second)
+	ticker := time.NewTicker(5 * time.Second)
 	// Blocks here, and continually runs.
 	for range ticker.C {
 		sleeper.tryToSleep()
