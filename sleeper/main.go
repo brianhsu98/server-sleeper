@@ -173,39 +173,35 @@ type JellyfinCaffeinater struct {
 	apiKey string
 }
 
-type JellyfinDevice struct {
-	Name             string    `json:"Name"`
-	DateLastActivity time.Time `json:"DateLastActivity"`
+type JellyfinSessionNowPlayingItem struct {
+	Name string `json:"Name"`
 }
 
-type JellyfinDeviceResponse struct {
-	Items []JellyfinDevice `json:"Items"`
+type JellyfinSession struct {
+	Client         string                        `json:"Client"`
+	NowPlayingItem JellyfinSessionNowPlayingItem `json:"NowPlayingItem"`
 }
 
 func (j *JellyfinCaffeinater) shouldCaffeinate() (bool, error) {
-	devices, err := j.getJellyfinDevices()
+	sessions, err := j.getActiveSessions()
 	if err != nil {
 		return false, err
 	}
 
-	log.Println("devices: %v", devices)
+	log.Println("sessions: %v", sessions)
 
-	currTime := time.Now()
-	// if any device has been active in the last 10 minutes, call that caffeinated.
-	// TODO: Probably we should directly query the sessions API, and then check NowPlayingItem.
-	// But I'm loath to do that.
-	for _, device := range devices {
-		if currTime.Sub(device.DateLastActivity) < 10*time.Minute {
-			log.Printf("Not sleeping: jellyfin device %s was active less than 10 minutes ago.\n", device.Name)
-			return true, err
+	for _, session := range sessions {
+		if session.NowPlayingItem.Name != "" {
+			log.Printf("Not sleeping: jellyfin session %s is actively playing content", session.Client)
+			return true, nil
 		}
 	}
 
 	return false, err
 }
 
-func (j *JellyfinCaffeinater) getJellyfinDevices() ([]JellyfinDevice, error) {
-	url := j.url + "/Devices"
+func (j *JellyfinCaffeinater) getActiveSessions() ([]JellyfinSession, error) {
+	url := j.url + "/Sessions?ActiveWithinSeconds=90"
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -228,13 +224,14 @@ func (j *JellyfinCaffeinater) getJellyfinDevices() ([]JellyfinDevice, error) {
 		return nil, err
 	}
 
-	var devices JellyfinDeviceResponse
-	err = json.Unmarshal(body, &devices)
+	var sessions []JellyfinSession
+
+	err = json.Unmarshal(body, &sessions)
 	if err != nil {
 		return nil, err
 	}
 
-	return devices.Items, nil
+	return sessions, nil
 }
 
 func main() {
