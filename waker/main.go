@@ -44,7 +44,7 @@ func waker(macAddr string, wakeCh <-chan struct{}) {
 			go func() {
 				err := wakeOnLan(macAddr)
 				if err != nil {
-					fmt.Errorf("%s", err)
+					fmt.Errorf("%s\n", err)
 				}
 			}()
 		}
@@ -59,14 +59,14 @@ func ipWatcher(ipAddr string, wakeCh chan struct{}) {
 		case <-ticker.C:
 			res, err := pingIP(ipAddr)
 			if err != nil {
-				fmt.Errorf("Error while pinging: %s", err)
+				log.Printf("Error while pinging: %s\n", err)
 			}
 
 			if res {
-				fmt.Printf("IP address %s is active. Waking target server", ipAddr)
+				log.Printf("IP address %s is active. Waking target server\n", ipAddr)
 				wakeCh <- struct{}{}
 			} else {
-				fmt.Printf("IP address %s is not active", ipAddr)
+				log.Printf("IP address %s is not active\n", ipAddr)
 			}
 		}
 	}
@@ -81,5 +81,5 @@ func main() {
 	wakeCh := make(chan struct{})
 
 	go ipWatcher(ipAddr, wakeCh)
-	go waker(macAddr, wakeCh)
+	waker(macAddr, wakeCh)
 }
