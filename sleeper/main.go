@@ -173,8 +173,6 @@ func (q *QBittorrentCaffeinater) queryTorrents(cookie *http.Cookie) ([]Torrent, 
 		return nil, err
 	}
 
-	log.Printf("Torrents: %v", torrents)
-
 	return torrents, nil
 }
 
@@ -285,7 +283,7 @@ func main() {
 		threshold:       20 * time.Minute,
 	}
 
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(30 * time.Second)
 	// Blocks here, and continually runs.
 	for range ticker.C {
 		sleeper.tryToSleep()
