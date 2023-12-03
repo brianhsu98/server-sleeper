@@ -23,9 +23,10 @@ type Config struct {
 }
 
 type Sleeper struct {
-	caffeinaters    []Caffeinater
-	lastCaffeinated time.Time
-	threshold       time.Duration
+	caffeinaters        []Caffeinater
+	lastCaffeinated     time.Time
+	threshold           time.Duration
+	lastCaffeinateCheck time.Time
 }
 
 func (s *Sleeper) tryToSleep() {
@@ -40,6 +41,13 @@ func (s *Sleeper) tryToSleep() {
 		}
 	}
 
+	// If we last checked for caffeination more than threshold ago, then this means the server was asleep.
+	// And we should reset the caffeination time
+	if time.Now().Sub(s.lastCaffeinateCheck) > s.threshold {
+		log.Printf("Last caffeinated check time was more than threshold time ago. This should mean that the computer was asleep, and was woken.")
+		s.lastCaffeinated = time.Now()
+	}
+
 	if time.Now().Sub(s.lastCaffeinated) > s.threshold {
 		log.Printf("Putting system to sleep. Last caffeintaed %s, current time %s", s.lastCaffeinated.String(), time.Now().String())
 		cmd := exec.Command("systemctl", "suspend")
@@ -50,6 +58,8 @@ func (s *Sleeper) tryToSleep() {
 	} else {
 		log.Printf("Not sleeping! Last caffeinated %s, current time %s", s.lastCaffeinated.String(), time.Now().String())
 	}
+
+	s.lastCaffeinateCheck = time.Now()
 }
 
 type Caffeinater interface {
