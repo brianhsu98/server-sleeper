@@ -3,11 +3,53 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
+	"os"
+	"os/exec"
 	"time"
 )
+
+type Config struct {
+	QBittorrentUrl      string `json:"qbittorrentUrl"`
+	QBittorrentUsername string `json:"qbittorrentUsername"`
+	QBittorrentPassword string `json:"qbittorrentPassword"`
+	JellyfinUrl         string `json:"jellyfinUrl"`
+	JellyfinApiKey      string `json:"jellyfinApiKey"`
+}
+
+type Sleeper struct {
+	caffeinaters    []Caffeinater
+	lastCaffeinated time.Time
+	threshold       time.Duration
+}
+
+func (s *Sleeper) tryToSleep() {
+	for _, caffeinater := range s.caffeinaters {
+		shouldCaffeinate, err := caffeinater.shouldCaffeinate()
+		if err != nil {
+			log.Printf("Hit an error when determining whether or not to sleep: %v", err)
+			continue
+		}
+		if shouldCaffeinate {
+			s.lastCaffeinated = time.Now()
+		}
+	}
+
+	if time.Now().Sub(s.lastCaffeinated) < s.threshold {
+		log.Printf("Putting system to sleep. Last caffeintaed %s, current time %s", s.lastCaffeinated.String(), time.Now().String())
+		cmd := exec.Command("systemctl", "suspend")
+		err := cmd.Run()
+		if err != nil {
+			log.Printf("failed to suspend the server: %v", err)
+		}
+	} else {
+		log.Printf("Not sleeping! Last caffeinated %s, current time %s", s.lastCaffeinated.String(), time.Now().String())
+	}
+}
 
 type Caffeinater interface {
 	shouldCaffeinate() (bool, error)
@@ -52,9 +94,11 @@ func (q *QBittorrentCaffeinater) shouldCaffeinate() (bool, error) {
 	for _, torrent := range torrents {
 		// > 100kbps and currently downloading.
 		if torrent.State == "downloading" && torrent.DlSpeed > 100000 {
+			log.Printf("Not sleeping: torrent %s is currently downloading at a rate of %d\n", torrent.Name, torrent.DlSpeed)
 			return true, nil
 		}
 	}
+
 	return false, nil
 }
 
@@ -120,6 +164,8 @@ func (q *QBittorrentCaffeinater) queryTorrents(cookie *http.Cookie) ([]Torrent, 
 }
 
 type JellyfinCaffeinater struct {
+	url    string
+	apiKey string
 }
 
 type JellyfinDevice struct {
@@ -132,15 +178,18 @@ type JellyfinDeviceResponse struct {
 }
 
 func (j *JellyfinCaffeinater) shouldCaffeinate() (bool, error) {
-	devices, err := getJellyfinDevices()
+	devices, err := j.getJellyfinDevices()
 	if err != nil {
 		return false, err
 	}
 
 	currTime := time.Now()
-	// if any device has been active in the last 30 minutes, do not sleep.
+	// if any device has been active in the last 10 minutes, call that caffeinated.
+	// TODO: Probably we should directly query the sessions API, and then check NowPlayingItem.
+	// But I'm loath to do that.
 	for _, device := range devices {
-		if currTime.Sub(device.DateLastActivity) < 30*time.Minute {
+		if currTime.Sub(device.DateLastActivity) < 10*time.Minute {
+			log.Printf("Not sleeping: jellyfin device %s was active less than 10 minutes ago.\n", device.Name)
 			return true, err
 		}
 	}
@@ -148,17 +197,15 @@ func (j *JellyfinCaffeinater) shouldCaffeinate() (bool, error) {
 	return false, err
 }
 
-func getJellyfinDevices() ([]JellyfinDevice, error) {
-	url := "http://brian-server.local:8096/Devices"
-	// this is bad security, but this is only on my local network :)
-	apiKey := "ca0c5282d8be40e6a8477892db9bf1a7"
+func (j *JellyfinCaffeinater) getJellyfinDevices() ([]JellyfinDevice, error) {
+	url := j.url + "/Devices"
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
 	// Add API key header
-	req.Header.Add("X-Emby-Token", apiKey)
+	req.Header.Add("X-Emby-Token", j.apiKey)
 
 	// Send req using http Client
 	client := &http.Client{}
@@ -184,4 +231,49 @@ func getJellyfinDevices() ([]JellyfinDevice, error) {
 }
 
 func main() {
+	log.SetFlags(log.LstdFlags)
+
+	configPath := flag.String("config", "config.json", "Path to the configuration file")
+	flag.Parse()
+
+	// Read the configuration file
+	configFile, err := os.ReadFile(*configPath)
+	if err != nil {
+		log.Println("Error reading config file:", err)
+		os.Exit(1)
+	}
+
+	// Unmarshal the configuration
+	var config Config
+	err = json.Unmarshal(configFile, &config)
+	if err != nil {
+		log.Println("Error parsing config file:", err)
+		os.Exit(1)
+	}
+
+	jellyfinCaffeinater := JellyfinCaffeinater{
+		url:    config.JellyfinUrl,
+		apiKey: config.JellyfinApiKey,
+	}
+	qBittorrentCaffeinater := QBittorrentCaffeinater{
+		url: config.QBittorrentUrl,
+		credentials: QBittorrentCredentials{
+			Username: config.QBittorrentUsername,
+			Password: config.QBittorrentPassword,
+		},
+	}
+
+	caffeinaters := []Caffeinater{&jellyfinCaffeinater, &qBittorrentCaffeinater}
+
+	sleeper := Sleeper{
+		caffeinaters:    caffeinaters,
+		lastCaffeinated: time.Now(),
+		threshold:       20 * time.Minute,
+	}
+
+	ticker := time.NewTicker(30 * time.Second)
+	// Blocks here, and continually runs.
+	for range ticker.C {
+		sleeper.tryToSleep()
+	}
 }
