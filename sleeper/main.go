@@ -43,6 +43,7 @@ func (s *Sleeper) tryToSleep() {
 
 	// If we last checked for caffeination more than 2 minutes ago, then this means the server was asleep.
 	// And we should reset the caffeination time
+	// This assumes that this computer was the actor that
 	if time.Now().Sub(s.lastCaffeinateCheck) > 2*time.Minute {
 		log.Printf("Last caffeinated check time was more than 2 minutes ago. This should mean that the computer was asleep, and was woken.")
 		s.lastCaffeinated = time.Now()
@@ -55,6 +56,8 @@ func (s *Sleeper) tryToSleep() {
 		if err != nil {
 			log.Printf("failed to suspend the server: %v", err)
 		}
+		// Try and set last caffeinated. When we suspend, we should wake back up right at this instruction
+		s.lastCaffeinateCheck = time.Now()
 	} else {
 		log.Printf("Not sleeping! Last caffeinated %s, current time %s", s.lastCaffeinated.String(), time.Now().String())
 	}
