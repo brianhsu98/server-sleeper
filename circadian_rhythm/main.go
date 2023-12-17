@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/go-ping/ping"
@@ -24,6 +25,7 @@ type Config struct {
 	JellyfinApiKey      string `json:"jellyfinApiKey"`
 	// TODO: Probably we should use DNS
 	TargetIpAddress  string `json:"targetIpAddress"`
+	TargetPort       string `json:"targetPort"`
 	TargetMacAddress string `json:"targetMacAddress"`
 	TVIpAddress      string `json:"tvIpAddress"`
 }
@@ -34,6 +36,7 @@ type CircadianRhythm struct {
 	threshold        time.Duration
 	targetMacAddress string
 	targetIpAddress  string
+	targetPort       int
 }
 
 // TODO: We should run the cycle every 5 seconds or so
@@ -41,7 +44,7 @@ func (c *CircadianRhythm) cycle() {
 	for _, caffeinater := range c.caffeinaters {
 		shouldCaffeinate, err := caffeinater.shouldCaffeinate()
 		if err != nil {
-			log.Printf("Hit an error when determining whether or not to sleep: %v.", err)
+			log.Printf("Hit an error when determining whether or not to sleep: %v. Server may be asleep.", err)
 			continue
 		}
 		if shouldCaffeinate {
@@ -69,7 +72,29 @@ func (c *CircadianRhythm) wake() error {
 }
 
 func (c *CircadianRhythm) sleep() error {
-	// TODO: Send a request to the sleep endpoint.
+	url := fmt.Sprintf("http://%s:%d/sleep", c.targetIpAddress, c.targetPort)
+
+	// Create a client
+	client := &http.Client{
+		Timeout: time.Second,
+	}
+
+	// Create a new request
+	req, err := http.NewRequest("POST", url, strings.NewReader(""))
+	if err != nil {
+		return err
+	}
+
+	// Send the request
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	// Log the response status
+	log.Printf("Response status: %s", resp.Status)
+
 	return nil
 }
 
@@ -160,7 +185,9 @@ func (q *QBittorrentCaffeinater) login() (*http.Cookie, error) {
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: time.Second,
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
@@ -250,7 +277,9 @@ func (j *JellyfinCaffeinater) getActiveSessions() ([]JellyfinSession, error) {
 	req.Header.Add("X-Emby-Token", j.apiKey)
 
 	// Send req using http Client
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: time.Second,
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
@@ -315,6 +344,7 @@ func main() {
 		threshold:        10 * time.Minute,
 		targetMacAddress: config.TargetMacAddress,
 		targetIpAddress:  config.TargetIpAddress,
+		targetPort:       config.targetPort,
 	}
 
 	ticker := time.NewTicker(3 * time.Second)
