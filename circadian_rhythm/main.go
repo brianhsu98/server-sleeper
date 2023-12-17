@@ -25,7 +25,7 @@ type Config struct {
 	JellyfinApiKey      string `json:"jellyfinApiKey"`
 	// TODO: Probably we should use DNS
 	TargetIpAddress  string `json:"targetIpAddress"`
-	TargetPort       string `json:"targetPort"`
+	TargetPort       int    `json:"targetPort"`
 	TargetMacAddress string `json:"targetMacAddress"`
 	TVIpAddress      string `json:"tvIpAddress"`
 }
@@ -344,7 +344,7 @@ func main() {
 		threshold:        10 * time.Minute,
 		targetMacAddress: config.TargetMacAddress,
 		targetIpAddress:  config.TargetIpAddress,
-		targetPort:       config.targetPort,
+		targetPort:       config.TargetPort,
 	}
 
 	ticker := time.NewTicker(3 * time.Second)
