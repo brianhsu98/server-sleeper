@@ -57,7 +57,7 @@ func (s *Sleeper) tryToSleep() {
 			log.Printf("failed to suspend the server: %v", err)
 		}
 		// Try and set last caffeinated. When we suspend, we should wake back up right at this instruction
-		s.lastCaffeinateCheck = time.Now()
+		s.lastCaffeinated = time.Now()
 	} else {
 		log.Printf("Not sleeping! Last caffeinated %s, current time %s", s.lastCaffeinated.String(), time.Now().String())
 	}
