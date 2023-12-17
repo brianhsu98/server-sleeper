@@ -65,10 +65,6 @@ func (s *Sleeper) tryToSleep() {
 	s.lastCaffeinateCheck = time.Now()
 }
 
-type Caffeinater interface {
-	shouldCaffeinate() (bool, error)
-}
-
 type QBittorrentCredentials struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
