@@ -102,6 +102,49 @@ type Caffeinater interface {
 	shouldCaffeinate() (bool, error)
 }
 
+type RecentlyWokenCaffeinater struct {
+	targetIp  string
+	lastState string
+}
+
+func NewRecentlyWokenCaffeinater(targetIp string) RecentlyWokenCaffeinater {
+	return RecentlyWokenCaffeinater{
+		targetIp: targetIp,
+		// bias towards overwaking.
+		lastState: "asleep",
+	}
+}
+
+// we want the transition from asleep -> awake
+func (r *RecentlyWokenCaffeinater) shouldCaffeinate() (bool, error) {
+	pinger, err := ping.NewPinger(r.targetIp)
+	if err != nil {
+		return false, err
+	}
+	pinger.Count = 1
+	pinger.Timeout = time.Second
+	err = pinger.Run()
+
+	if err != nil {
+		return false, err
+	}
+
+	stats := pinger.Statistics()
+
+	currentState := "awake"
+	if stats.PacketsRecv == 0 {
+		currentState = "asleep"
+	}
+
+	ret := false
+	if r.lastState == "asleep" && currentState == "awake" {
+		ret = true
+	}
+	r.lastState = currentState
+
+	return ret, nil
+}
+
 type TVPingerCaffeinater struct {
 	ip string
 }
@@ -335,8 +378,9 @@ func main() {
 		},
 	}
 	tvCaffeinater := TVPingerCaffeinater{ip: config.TVIpAddress}
+	recentlyWokenCaffeinater := NewRecentlyWokenCaffeinater(config.TargetIpAddress)
 
-	caffeinaters := []Caffeinater{&jellyfinCaffeinater, &qBittorrentCaffeinater, &tvCaffeinater}
+	caffeinaters := []Caffeinater{&jellyfinCaffeinater, &qBittorrentCaffeinater, &tvCaffeinater, &recentlyWokenCaffeinater}
 
 	circadianRhythm := CircadianRhythm{
 		caffeinaters:     caffeinaters,
